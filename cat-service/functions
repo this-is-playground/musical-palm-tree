@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Cat Service Helper Functions
+
+# Start the service locally (requires Python and Flask)
+start_local() {
+    echo "Starting cat service locally..."
+    cd "$(dirname "$0")"
+    
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "venv" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv venv
+    fi
+    
+    # Activate virtual environment and install dependencies
+    source venv/bin/activate
+    pip install -r requirements.txt
+    python app.py
+}
+
+# Build Docker image
+build_docker() {
+    echo "Building Docker image for cat service..."
+    cd "$(dirname "$0")"
+    docker build -t cat-service .
+}
+
+# Run Docker container
+run_docker() {
+    echo "Running cat service in Docker container..."
+    docker run -p 8080:8080 cat-service
+}
+
+# Build and run Docker container in one step
+docker_up() {
+    echo "Building and running cat service with Docker..."
+    build_docker && run_docker
+}
+
+# Stop Docker container
+stop_docker() {
+    echo "Stopping cat service Docker container..."
+    docker stop $(docker ps -q --filter "ancestor=cat-service")
+}
+
+# Show help
+help() {
+    echo "Cat Service Functions:"
+    echo "  start_local  - Start service locally with Python"
+    echo "  build_docker - Build Docker image"
+    echo "  run_docker   - Run Docker container"
+    echo "  docker_up    - Build and run Docker container"
+    echo "  stop_docker  - Stop Docker container"
+    echo "  help         - Show this help"
+}
+
+# If script is called directly, show help
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    help
+fi
