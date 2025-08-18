@@ -5,7 +5,7 @@
 # Start the service locally (requires Python and Flask)
 start_local() {
     echo "Starting cat service locally..."
-    cd "$(dirname "$0")"
+    cd cat-service
     
     # Create virtual environment if it doesn't exist
     if [ ! -d "venv" ]; then
@@ -22,7 +22,7 @@ start_local() {
 # Build Docker image
 build_docker() {
     echo "Building Docker image for cat service..."
-    cd "$(dirname "$0")"
+    cd cat-service
     docker build -t cat-service .
 }
 
