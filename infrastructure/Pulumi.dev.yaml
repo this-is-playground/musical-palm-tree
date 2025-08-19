@@ -1,0 +1,5 @@
+encryptionsalt: v1:ocygaMpVfWc=:v1:6I6Y6RUD27yJxyY3:/XBzQW+JIs4AmQXXXLJt6slMTFEg3g==
+config:
+  aws:region: ca-central-1
+  cat-service-infrastructure:appName: cat-service
+  cat-service-infrastructure:environment: dev
