@@ -3,11 +3,6 @@ AWS Lambda adapter for Flask QR Code Creator application.
 This module adapts the Flask app to work with AWS Lambda using aws-wsgi.
 Handles both API Gateway and Lambda Function URL event formats.
 """
-import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'service'))
-
 from app import app
 import awsgi
 
