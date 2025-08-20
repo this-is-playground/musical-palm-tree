@@ -37,7 +37,7 @@ build_docker() {
 
 # Run Docker container
 run_docker() {
-    echo "Running service in Docker container..."
+    echo "Running service in Docker container...
     docker run -p 8080:8080 service
 }
 
