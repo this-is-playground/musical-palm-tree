@@ -1,0 +1,19 @@
+{
+  "name": "musical-palm-tree-infrastructure",
+  "version": "1.0.0",
+  "description": "Pulumi infrastructure for Musical Palm Tree QR Code Creator",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@pulumi/pulumi": "^3.0.0",
+    "@pulumi/aws": "^6.0.0",
+    "@pulumi/awsx": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
