@@ -2,11 +2,13 @@
 
 This Flask QR Code Creator can be deployed to AWS Lambda with Function URL for serverless operation.
 
+It's important we write our infrastructure as code in Python.
+
 ## Files Required for Lambda Deployment
 
-1. **`app.py`** - The main Flask application (no changes needed)
-2. **`lambda_adapter.py`** - Lambda handler that adapts Flask for AWS Lambda using aws-wsgi
-3. **`requirements.txt`** -
+1. **`service/app.py`** - The main Flask application (no changes needed)
+2. **`service/lambda_adapter.py`** - Lambda handler that adapts Flask for AWS Lambda using aws-wsgi
+3. **`service/requirements.txt`** -
 
 ## How It Works
 
