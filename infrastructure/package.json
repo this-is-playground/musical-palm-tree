@@ -1,0 +1,19 @@
+{
+  "name": "qr-code-creator-infrastructure",
+  "version": "1.0.0",
+  "description": "Pulumi infrastructure for QR Code Creator Lambda deployment",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "pulumi up"
+  },
+  "dependencies": {
+    "@pulumi/pulumi": "^3.0.0",
+    "@pulumi/aws": "^6.0.0",
+    "@pulumi/awsx": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

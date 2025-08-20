@@ -1,0 +1,3 @@
+name: qr-code-creator
+runtime: nodejs
+description: QR Code Creator Flask application deployed to AWS Lambda with Function URL
