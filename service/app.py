@@ -32,15 +32,16 @@ def qr_tool():
         }
         button.secondary { background:#95a5a6; }
         button.ghost { background:#ecf0f1; color:#2c3e50; }
-        .panel { display:grid; grid-template-columns: 1fr 340px; gap:18px; margin-top:16px; }
-        .qrbox { background:#fafbfc; border:1px solid var(--soft); border-radius:12px; padding:14px; text-align:center; position:relative; }
-        .qrbox img { max-width:100%; height:auto; display:none; margin:auto; }
+        .main-display { text-align:center; margin-top:16px; }
+        .main-qr { background:#fafbfc; border:1px solid var(--soft); border-radius:12px; padding:14px; display:inline-block; margin-bottom:16px; }
+        .main-qr img { max-width:100%; height:auto; display:none; margin:auto; }
+        .variants { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin-top:16px; }
+        .variant-tile { background:#fafbfc; border:1px solid var(--soft); padding:8px; border-radius:8px; text-align:center; }
+        .variant-tile img { width:100%; height:auto; }
+        .variant-label { font-size:11px; color:var(--muted); margin-top:4px; }
         .meta { font-size:13px; color:var(--muted); margin-top:8px; word-break:break-all; }
-        .tools { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; align-items:center; }
-        .grid { margin-top:16px; display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
-        .tile { background:#fafbfc; border:1px solid var(--soft); padding:10px; border-radius:10px; text-align:center; }
-        .tile img { width:100%; height:auto; }
-        @media (max-width: 900px) { .panel { grid-template-columns: 1fr; } .grid { grid-template-columns: repeat(2, 1fr); } }
+        .tools { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; align-items:center; justify-content:center; }
+        @media (max-width: 900px) { .variants { grid-template-columns: repeat(2, 1fr); } }
       </style>
     </head>
     <body>
@@ -52,10 +53,8 @@ def qr_tool():
           <input id="url" type="text" placeholder="https://example.com" />
 
           <div class="row" style="margin-top:12px">
-            <button id="generate">Generate</button>
+            <button id="generate">Generate QR Styles</button>
             <button id="example" class="secondary" type="button">Example</button>
-            <button id="randomize" class="ghost" type="button">Randomize Style</button>
-            <button id="refresh-pattern" class="ghost" type="button">Refresh Pattern</button>
 
             <select id="size" title="Size">
               <option value="200">200×200</option>
@@ -82,22 +81,20 @@ def qr_tool():
             </label>
           </div>
 
-          <div class="panel">
-            <div>
-              <p class="meta">Tip: “Refresh Pattern” changes the QR appearance while keeping the same destination (adds a <code>#r=…</code> fragment).</p>
-              <div class="tools">
-                <a id="open-image" class="btn" href="#" target="_blank" style="display:none">Open image</a>
-                <a id="download" class="btn" href="#" download="qr.png" style="display:none">Download PNG</a>
-                <button id="copy-link" class="ghost" type="button" style="display:none">Copy target URL</button>
-                <button id="make-six" class="ghost" type="button">Generate Six-pack</button>
-              </div>
-              <div class="meta" id="target" style="display:none; margin-top:8px;"></div>
-              <div id="grid" class="grid"></div>
+          <div class="main-display">
+            <div class="main-qr">
+              <img id="qr" alt="Main QR code" />
             </div>
-
-            <div class="qrbox">
-              <img id="qr" alt="QR code preview" />
+            
+            <div class="tools">
+              <a id="open-image" class="btn" href="#" target="_blank" style="display:none">Open Main</a>
+              <a id="download" class="btn" href="#" download="qr-main.png" style="display:none">Download Main</a>
+              <button id="copy-link" class="ghost" type="button" style="display:none">Copy URL</button>
             </div>
+            
+            <div class="meta" id="target" style="display:none; margin-top:8px;"></div>
+            
+            <div id="variants" class="variants"></div>
           </div>
         </div>
       </div>
@@ -106,9 +103,9 @@ def qr_tool():
         const $ = (id) => document.getElementById(id);
         const urlInput = $("url"), sizeSel = $("size"), eccSel = $("ecc"), marginSel = $("margin");
         const qrImg = $("qr"), dl = $("download"), openImg = $("open-image"), copyBtn = $("copy-link"),
-              target = $("target"), grid = $("grid"), varyCb = $("varyFragment");
+              target = $("target"), variants = $("variants"), varyCb = $("varyFragment");
 
-        // Safe, high-contrast palettes (dark fg on light bg) for scannability.
+        // Safe, high-contrast palettes for scannability.
         const PALETTES = [
           { fg:[0,0,0],       bg:[255,255,255] },   // classic
           { fg:[31,41,55],    bg:[250,250,250] },   // slate/near-white
@@ -117,7 +114,10 @@ def qr_tool():
           { fg:[88, 28,135],  bg:[250,245,255] },   // purple on lavender
           { fg:[20, 83, 45],  bg:[240,253,244] },   // green on mint
           { fg:[146,64,14],   bg:[255,247,237] },   // brown on peach
-          { fg:[180, 37, 41], bg:[255,245,245] }    // red on rose
+          { fg:[180, 37, 41], bg:[255,245,245] },   // red on rose
+          // Inverted palettes (light fg on dark bg)
+          { fg:[255,255,255], bg:[31,41,55] },      // white on dark slate
+          { fg:[248,250,252], bg:[30,58,138] }      // off-white on dark blue
         ];
         let currentPalette = PALETTES[0];
 
@@ -153,91 +153,103 @@ def qr_tool():
           return base + "?" + q.toString();
         }
 
-        function render(single = true) {
+        function generateAllStyles() {
           const raw = canonicalize(urlInput.value);
           if (!raw) return;
-          const targetUrl = raw; // what the user intends
-          const data = withVariant(raw); // what we encode (may include #r=…)
+          
+          const targetUrl = raw;
           const size = sizeSel.value, ecc = eccSel.value, margin = marginSel.value;
-          const src = buildQrUrl(data, size, ecc, margin, currentPalette.fg, currentPalette.bg);
-
-          // Main preview
-          if (single) {
-            qrImg.src = src;
-            qrImg.style.display = "block";
-            dl.href = src; dl.style.display = "inline-block";
-            openImg.href = src; openImg.style.display = "inline-block";
-            copyBtn.style.display = "inline-block";
-            target.style.display = "block";
-            target.textContent = "Target: " + targetUrl + (varyCb.checked ? "  (pattern varied via fragment)" : "");
-            copyBtn.onclick = async () => {
-              try { await navigator.clipboard.writeText(targetUrl); copyBtn.textContent = "Copied!"; }
-              catch { copyBtn.textContent = "Unable to copy"; }
-              setTimeout(() => (copyBtn.textContent = "Copy target URL"), 1200);
-            };
-          }
-          return {src, targetUrl};
-        }
-
-        function randomizeStyle() {
-          currentPalette = PALETTES[Math.floor(Math.random()*PALETTES.length)];
-          // Optionally randomize ECC/margin/size slightly for variety:
-          const eccOpts = ["L","M","Q","H"];
-          eccSel.value = eccOpts[Math.floor(Math.random()*eccOpts.length)];
-          marginSel.value = ["2","4","8"][Math.floor(Math.random()*3)];
-          // Keep size stable by default; change if you want more visual churn:
-          // sizeSel.value = ["200","256","320","512"][Math.floor(Math.random()*4)];
+          
+          // Main QR code (classic black/white)
+          const mainData = withVariant(raw);
+          const mainSrc = buildQrUrl(mainData, size, ecc, margin, PALETTES[0].fg, PALETTES[0].bg);
+          
+          qrImg.src = mainSrc;
+          qrImg.style.display = "block";
+          dl.href = mainSrc;
+          dl.style.display = "inline-block";
+          openImg.href = mainSrc;
+          openImg.style.display = "inline-block";
+          copyBtn.style.display = "inline-block";
+          target.style.display = "block";
+          target.textContent = "Target: " + targetUrl;
+          
+          copyBtn.onclick = async () => {
+            try { await navigator.clipboard.writeText(targetUrl); copyBtn.textContent = "Copied!"; }
+            catch { copyBtn.textContent = "Unable to copy"; }
+            setTimeout(() => (copyBtn.textContent = "Copy URL"), 1200);
+          };
+          
+          // Generate 6 style variants (including inverted colors)
+          variants.innerHTML = "";
+          const variantConfigs = [
+            { palette: 1, ecc: "M", margin: 2, label: "Slate" },
+            { palette: 2, ecc: "Q", margin: 2, label: "Navy/Cream" },
+            { palette: 4, ecc: "L", margin: 2, label: "Purple" },
+            { palette: 5, ecc: "M", margin: 8, label: "Green" },
+            { palette: 8, ecc: "H", margin: 2, label: "Inverted Slate" },
+            { palette: 9, ecc: "Q", margin: 4, label: "Inverted Blue" }
+          ];
+          
+          variantConfigs.forEach((config, i) => {
+            const variantData = withVariant(raw);
+            const palette = PALETTES[config.palette];
+            const src = buildQrUrl(variantData, Math.floor(size * 0.6), config.ecc, config.margin, palette.fg, palette.bg);
+            
+            const tile = document.createElement("div");
+            tile.className = "variant-tile";
+            
+            const img = document.createElement("img");
+            img.src = src;
+            img.alt = `QR variant ${i+1}`;
+            
+            const label = document.createElement("div");
+            label.className = "variant-label";
+            label.textContent = config.label;
+            
+            const dl = document.createElement("a");
+            dl.href = src;
+            dl.download = `qr-${config.label.toLowerCase()}.png`;
+            dl.className = "btn";
+            dl.style.fontSize = "10px";
+            dl.style.padding = "4px 6px";
+            dl.style.marginTop = "4px";
+            dl.textContent = "DL";
+            
+            tile.appendChild(img);
+            tile.appendChild(label);
+            tile.appendChild(dl);
+            variants.appendChild(tile);
+          });
         }
 
         // UI hooks
-        $("generate").addEventListener("click", (e) => { e.preventDefault(); grid.innerHTML = ""; render(true); });
+        $("generate").addEventListener("click", (e) => {
+          e.preventDefault();
+          generateAllStyles();
+        });
+        
         $("example").addEventListener("click", (e) => {
           e.preventDefault();
           urlInput.value = "https://www.pulumi.com";
-          grid.innerHTML = "";
-          render(true);
-        });
-        $("randomize").addEventListener("click", (e) => {
-          e.preventDefault();
-          randomizeStyle();
-          grid.innerHTML = "";
-          render(true);
-        });
-        $("refresh-pattern").addEventListener("click", (e) => {
-          e.preventDefault();
-          grid.innerHTML = "";
-          render(true); // new fragment -> new pattern
+          generateAllStyles();
         });
 
         urlInput.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); grid.innerHTML = ""; render(true); }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            generateAllStyles();
+          }
         });
+        
         [sizeSel, eccSel, marginSel, $("varyFragment")].forEach(el =>
-          el.addEventListener("change", () => { grid.innerHTML = ""; render(true); })
+          el.addEventListener("change", () => {
+            if (qrImg.src) generateAllStyles(); // only regenerate if we have content
+          })
         );
 
-        // Six-pack generator
-        $("make-six").addEventListener("click", (e) => {
-          e.preventDefault();
-          grid.innerHTML = "";
-          const raw = canonicalize(urlInput.value || "https://www.pulumi.com");
-          for (let i = 0; i < 6; i++) {
-            // vary both style & pattern
-            currentPalette = PALETTES[(i + Math.floor(Math.random()*PALETTES.length)) % PALETTES.length];
-            const {src} = render(false); // build once to use current settings
-            const tile = document.createElement("div"); tile.className = "tile";
-            const img = document.createElement("img"); img.src = src; img.alt = "QR variant";
-            const a = document.createElement("a"); a.href = src; a.download = "qr-" + (i+1) + ".png"; a.className = "btn"; a.textContent = "Download";
-            tile.appendChild(img); tile.appendChild(document.createElement("div")).style.height = "8px"; tile.appendChild(a);
-            grid.appendChild(tile);
-          }
-          // Re-render main preview (optional)
-          render(true);
-        });
-
-        // First-time defaults
+        // Initialize empty
         urlInput.value = "";
-        render(true);
       </script>
     </body>
     </html>
