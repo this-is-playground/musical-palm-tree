@@ -37,7 +37,7 @@ build_docker() {
 
 # Run Docker container
 run_docker() {
-    echo "Running service in Docker container...
+    echo "Running service in Docker container..."
     docker run -p 8080:8080 service
 }
 
@@ -53,15 +53,60 @@ stop_docker() {
     docker stop $(docker ps -q --filter "ancestor=service")
 }
 
+# Start services with Docker Compose (includes Redis)
+compose_up() {
+    echo "Starting services with Docker Compose (Flask + Redis)..."
+    
+    # Get the directory where the functions file is located
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    (
+        cd "$PROJECT_ROOT"
+        docker-compose up --build
+    )
+}
+
+# Stop Docker Compose services
+compose_down() {
+    echo "Stopping Docker Compose services..."
+    
+    # Get the directory where the functions file is located
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    (
+        cd "$PROJECT_ROOT"
+        docker-compose down
+    )
+}
+
+# Start services with Docker Compose in background
+compose_up_bg() {
+    echo "Starting services with Docker Compose in background..."
+    
+    # Get the directory where the functions file is located
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    
+    (
+        cd "$PROJECT_ROOT"
+        docker-compose up --build -d
+    )
+}
+
 # Show help
 help() {
     echo "Service Functions:"
-    echo "  start_local  - Start service locally with Python"
-    echo "  build_docker - Build Docker image"
-    echo "  run_docker   - Run Docker container"
-    echo "  docker_up    - Build and run Docker container"
-    echo "  stop_docker  - Stop Docker container"
-    echo "  help         - Show this help"
+    echo "  start_local    - Start service locally with Python (no Redis stats)"
+    echo "  build_docker   - Build Docker image"
+    echo "  run_docker     - Run Docker container"
+    echo "  docker_up      - Build and run Docker container"
+    echo "  stop_docker    - Stop Docker container"
+    echo "  compose_up     - Start Flask + Redis with Docker Compose"
+    echo "  compose_down   - Stop Docker Compose services"
+    echo "  compose_up_bg  - Start Flask + Redis with Docker Compose in background"
+    echo "  help           - Show this help"
 }
 
 # If script is called directly, show help

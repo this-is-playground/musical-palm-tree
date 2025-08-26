@@ -1,9 +1,102 @@
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, jsonify
+import redis
+import os
+from datetime import datetime, timedelta
+import json
+import logging
 
 app = Flask(__name__)
 
+# Stats storage - Redis with in-memory fallback
+class StatsStore:
+    def __init__(self):
+        self.redis_client = None
+        self.memory_store = {}
+        self.storage_type = "memory"
+        
+        # Try to connect to Redis
+        redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+        try:
+            self.redis_client = redis.from_url(redis_url)
+            self.redis_client.ping()
+            self.storage_type = "redis"
+            logging.info(f"Connected to Redis at {redis_url}")
+        except Exception as e:
+            logging.warning(f"Redis not available, using in-memory storage: {e}")
+    
+    def increment_qr_count(self):
+        now = datetime.now()
+        hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
+        day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
+        week_key = f"qr_count_week_{now.strftime('%Y%W')}"
+        
+        if self.redis_client:
+            try:
+                pipe = self.redis_client.pipeline()
+                pipe.incr(hour_key)
+                pipe.expire(hour_key, 3600)  # 1 hour TTL
+                pipe.incr(day_key)
+                pipe.expire(day_key, 86400)  # 24 hours TTL
+                pipe.incr(week_key)
+                pipe.expire(week_key, 604800)  # 7 days TTL
+                pipe.execute()
+            except Exception:
+                # Redis failed, fall back to memory
+                self._increment_memory(hour_key, day_key, week_key)
+        else:
+            self._increment_memory(hour_key, day_key, week_key)
+    
+    def _increment_memory(self, hour_key, day_key, week_key):
+        for key in [hour_key, day_key, week_key]:
+            self.memory_store[key] = self.memory_store.get(key, 0) + 1
+    
+    def get_stats(self):
+        now = datetime.now()
+        hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
+        day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
+        week_key = f"qr_count_week_{now.strftime('%Y%W')}"
+        
+        stats = {
+            "last_hour": 0,
+            "last_day": 0,
+            "last_week": 0,
+            "storage_type": self.storage_type
+        }
+        
+        if self.redis_client:
+            try:
+                pipe = self.redis_client.pipeline()
+                pipe.get(hour_key)
+                pipe.get(day_key)
+                pipe.get(week_key)
+                results = pipe.execute()
+                
+                stats["last_hour"] = int(results[0] or 0)
+                stats["last_day"] = int(results[1] or 0)
+                stats["last_week"] = int(results[2] or 0)
+            except Exception:
+                # Redis failed, use memory
+                stats["last_hour"] = self.memory_store.get(hour_key, 0)
+                stats["last_day"] = self.memory_store.get(day_key, 0)
+                stats["last_week"] = self.memory_store.get(week_key, 0)
+                stats["storage_type"] = "memory (redis failed)"
+        else:
+            stats["last_hour"] = self.memory_store.get(hour_key, 0)
+            stats["last_day"] = self.memory_store.get(day_key, 0)
+            stats["last_week"] = self.memory_store.get(week_key, 0)
+        
+        return stats
+
+stats_store = StatsStore()
+
+@app.route("/api/stats")
+def get_stats():
+    return jsonify(stats_store.get_stats())
+
 @app.route("/")
 def qr_tool():
+    # Track QR generation request
+    stats_store.increment_qr_count()
     html = """
     <!doctype html>
     <html>
@@ -41,6 +134,13 @@ def qr_tool():
         .variant-label { font-size:11px; color:var(--muted); margin-top:4px; }
         .meta { font-size:13px; color:var(--muted); margin-top:8px; word-break:break-all; }
         .tools { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; align-items:center; justify-content:center; }
+        .stats-section { margin-top:20px; padding:16px; background:#f8f9fa; border-radius:10px; border:1px solid var(--border); }
+        .stats-title { font-size:14px; font-weight:600; color:var(--muted); margin-bottom:8px; }
+        .stats-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+        .stat-item { text-align:center; padding:8px; }
+        .stat-number { font-size:20px; font-weight:700; color:var(--accent); }
+        .stat-label { font-size:11px; color:var(--muted); margin-top:2px; }
+        .storage-info { font-size:10px; color:var(--muted); margin-top:8px; text-align:center; }
         @media (max-width: 900px) { .variants { grid-template-columns: repeat(2, 1fr); } }
       </style>
     </head>
@@ -95,6 +195,25 @@ def qr_tool():
             <div class="meta" id="target" style="display:none; margin-top:8px;"></div>
             
             <div id="variants" class="variants"></div>
+          </div>
+          
+          <div class="stats-section">
+            <div class="stats-title">QR Code Generation Stats</div>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <div class="stat-number" id="stat-hour">-</div>
+                <div class="stat-label">Last Hour</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="stat-day">-</div>
+                <div class="stat-label">Last Day</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-number" id="stat-week">-</div>
+                <div class="stat-label">Last Week</div>
+              </div>
+            </div>
+            <div class="storage-info" id="storage-info">Loading stats...</div>
           </div>
         </div>
       </div>
@@ -247,6 +366,25 @@ def qr_tool():
             if (qrImg.src) generateAllStyles(); // only regenerate if we have content
           })
         );
+
+        // Load and refresh stats
+        async function loadStats() {
+          try {
+            const response = await fetch('/api/stats');
+            const stats = await response.json();
+            
+            $("stat-hour").textContent = stats.last_hour;
+            $("stat-day").textContent = stats.last_day;
+            $("stat-week").textContent = stats.last_week;
+            $("storage-info").textContent = `Storage: ${stats.storage_type}`;
+          } catch (error) {
+            $("storage-info").textContent = "Stats unavailable";
+          }
+        }
+        
+        // Load stats on page load and refresh every 30 seconds
+        loadStats();
+        setInterval(loadStats, 30000);
 
         // Initialize empty
         urlInput.value = "";
