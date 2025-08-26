@@ -25,9 +25,16 @@ start_local() {
 build_docker() {
     echo "Building Docker image for service..."
     
-    # Get the directory where the functions file is located
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    # Use current working directory as project root
+    PROJECT_ROOT="$(pwd)"
+    
+    echo "Building from: $PROJECT_ROOT/service"
+    
+    if [ ! -d "$PROJECT_ROOT/service" ]; then
+        echo "Error: service directory not found at $PROJECT_ROOT/service"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
     
     (
         cd "$PROJECT_ROOT/service"
@@ -41,71 +48,71 @@ run_docker() {
     docker run -p 8080:8080 service
 }
 
-# Build and run Docker container in one step
+# Build and run Docker container in one step (with Redis)
 docker_up() {
-    echo "Building and running service with Docker..."
-    build_docker && run_docker
+    echo "Building and running service with Docker (includes Redis)..."
+    compose_up_bg
 }
 
 # Stop Docker container
 stop_docker() {
-    echo "Stopping service Docker container..."
-    docker stop $(docker ps -q --filter "ancestor=service")
+    echo "Stopping Docker services..."
+    compose_down
 }
 
 # Start services with Docker Compose (includes Redis)
 compose_up() {
     echo "Starting services with Docker Compose (Flask + Redis)..."
+    PROJECT_ROOT="$(pwd)"
     
-    # Get the directory where the functions file is located
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
     
-    (
-        cd "$PROJECT_ROOT"
-        docker-compose up --build
-    )
+    docker-compose up --build
 }
 
 # Stop Docker Compose services
 compose_down() {
     echo "Stopping Docker Compose services..."
+    PROJECT_ROOT="$(pwd)"
     
-    # Get the directory where the functions file is located
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
     
-    (
-        cd "$PROJECT_ROOT"
-        docker-compose down
-    )
+    docker-compose down
 }
 
 # Start services with Docker Compose in background
 compose_up_bg() {
     echo "Starting services with Docker Compose in background..."
+    PROJECT_ROOT="$(pwd)"
     
-    # Get the directory where the functions file is located
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
     
-    (
-        cd "$PROJECT_ROOT"
-        docker-compose up --build -d
-    )
+    docker-compose up --build -d
 }
 
 # Show help
 help() {
     echo "Service Functions:"
-    echo "  start_local    - Start service locally with Python (no Redis stats)"
-    echo "  build_docker   - Build Docker image"
-    echo "  run_docker     - Run Docker container"
-    echo "  docker_up      - Build and run Docker container"
-    echo "  stop_docker    - Stop Docker container"
-    echo "  compose_up     - Start Flask + Redis with Docker Compose"
+    echo "  start_local    - Start service locally with Python (in-memory stats only)"
+    echo "  docker_up      - Build and run Flask + Redis with Docker Compose (background)"
+    echo "  stop_docker    - Stop all Docker services"
+    echo "  compose_up     - Start Flask + Redis with Docker Compose (foreground)"
+    echo "  compose_up_bg  - Start Flask + Redis with Docker Compose (background)"
     echo "  compose_down   - Stop Docker Compose services"
-    echo "  compose_up_bg  - Start Flask + Redis with Docker Compose in background"
+    echo "  build_docker   - Build Docker image (standalone)"
+    echo "  run_docker     - Run Docker container (standalone, no Redis)"
     echo "  help           - Show this help"
 }
 
