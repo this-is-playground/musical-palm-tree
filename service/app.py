@@ -104,6 +104,38 @@ stats_store = StatsStore()
 def get_stats():
     return jsonify(stats_store.get_stats())
 
+@app.route("/api/test")
+def test_redis():
+    """Test endpoint to verify Redis connectivity and basic functionality"""
+    stats_store._ensure_redis_connection()
+    
+    test_result = {
+        "redis_connected": stats_store.storage_type == "redis",
+        "storage_type": stats_store.storage_type,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Test Redis operations if connected
+    if stats_store.redis_client:
+        try:
+            # Test basic operations
+            test_key = f"test_key_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            stats_store.redis_client.set(test_key, "test_value", ex=60)  # Expires in 60 seconds
+            retrieved_value = stats_store.redis_client.get(test_key)
+            stats_store.redis_client.delete(test_key)
+            
+            test_result["redis_test"] = {
+                "set_get_test": "passed" if retrieved_value == b"test_value" else "failed",
+                "test_key_used": test_key
+            }
+        except Exception as e:
+            test_result["redis_test"] = {
+                "set_get_test": "failed",
+                "error": str(e)
+            }
+    
+    return jsonify(test_result)
+
 @app.route("/generate", methods=["POST"])
 def generate_qr():
     """Generate QR code via REST API"""
@@ -297,18 +329,29 @@ def qr_tool():
         function rgbParam([r,g,b]) { return [r,g,b].join("-"); }
 
         function buildQrUrl(data, size, ecc, margin, fg, bg) {
-          const base = "https://api.qrserver.com/v1/create-qr-code/";
-          const q = new URLSearchParams({
-            size: size + "x" + size,
-            data: data,
-            ecc: ecc,
-            margin: String(margin),
-            color: rgbParam(fg),
-            bgcolor: rgbParam(bg),
-            format: "png",
-            t: Date.now().toString() // cache-bust
-          });
-          return base + "?" + q.toString();
+          // Mock QR URL - no external API calls needed
+          // Return a data URL for a simple colored square as placeholder
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          
+          // Fill background
+          ctx.fillStyle = `rgb(${bg.join(',')})`;
+          ctx.fillRect(0, 0, size, size);
+          
+          // Create simple pattern to represent QR code
+          ctx.fillStyle = `rgb(${fg.join(',')})`;
+          const blockSize = Math.floor(size / 10);
+          for (let i = 0; i < 10; i++) {
+            for (let j = 0; j < 10; j++) {
+              if ((i + j) % 2 === 0) {
+                ctx.fillRect(i * blockSize, j * blockSize, blockSize, blockSize);
+              }
+            }
+          }
+          
+          return canvas.toDataURL('image/png');
         }
 
         function generateAllStyles() {

@@ -11,26 +11,21 @@ const environment = "dev";
 // Resource naming helper
 const resourceName = (resource: string) => `${appName}-${environment}-${resource}`;
 
-// VPC with public and private subnets
-const vpc = new awsx.ec2.Vpc(resourceName("vpc"), {
-    cidrBlock: "10.0.0.0/16",
-    numberOfAvailabilityZones: 2,
-    natGateways: { strategy: "None" }, // Remove NAT Gateways to save ~$45/month
-    tags: {
-        Name: resourceName("vpc"),
-        Environment: environment,
-    },
-});
+// Get default VPC and subnets for Redis (simpler than creating custom VPC)
+const defaultVpc = aws.ec2.getVpc({ default: true });
+const defaultSubnets = defaultVpc.then(vpc => aws.ec2.getSubnets({ 
+    filters: [{ name: "vpc-id", values: [vpc.id] }] 
+}));
 
-// Security group for ElastiCache
+// Security group for ElastiCache Redis (in default VPC) 
 const redisSg = new aws.ec2.SecurityGroup(resourceName("redis-sg"), {
-    vpcId: vpc.vpcId,
+    vpcId: defaultVpc.then(vpc => vpc.id),
     description: "Security group for ElastiCache Redis",
     ingress: [{
         protocol: "tcp",
         fromPort: 6379,
         toPort: 6379,
-        self: true,
+        cidrBlocks: ["0.0.0.0/0"], // Allow from anywhere (for simplicity)
     }],
     egress: [{
         protocol: "-1",
@@ -40,34 +35,11 @@ const redisSg = new aws.ec2.SecurityGroup(resourceName("redis-sg"), {
     }],
 });
 
-// Security group for Lambda
-const lambdaSg = new aws.ec2.SecurityGroup(resourceName("lambda-sg"), {
-    vpcId: vpc.vpcId,
-    description: "Security group for Lambda function",
-    ingress: [], // Lambda doesn't need inbound rules for Function URLs
-    egress: [{
-        protocol: "-1",
-        fromPort: 0,
-        toPort: 0,
-        cidrBlocks: ["0.0.0.0/0"],
-    }],
-});
-
-// Allow Lambda to connect to Redis
-new aws.ec2.SecurityGroupRule(resourceName("lambda-to-redis"), {
-    type: "ingress",
-    fromPort: 6379,
-    toPort: 6379,
-    protocol: "tcp",
-    securityGroupId: redisSg.id,
-    sourceSecurityGroupId: lambdaSg.id,
-});
-
-// ElastiCache Serverless Redis cache
-const redisServerlessCache = new aws.elasticache.ServerlessCache(resourceName("redis-serverless-v4"), {
+// ElastiCache Serverless Redis cache (in default VPC)
+const redisServerlessCache = new aws.elasticache.ServerlessCache(resourceName("redis-serverless-v6"), {
     engine: "redis",
-    name: resourceName("redis-serverless-v4"),
-    subnetIds: ["subnet-00d722ca1f5a3ba28", "subnet-0d815207fbd5e26ca"], // Use existing private subnets
+    name: resourceName("redis-serverless-v6"),
+    subnetIds: defaultSubnets.then(subnets => subnets.ids),
     securityGroupIds: [redisSg.id],
     description: "Serverless Redis cache for QR code stats",
     dailySnapshotTime: "03:00",
@@ -99,8 +71,30 @@ new aws.iam.RolePolicyAttachment(resourceName("lambda-vpc"), {
 // Create Lambda deployment package from service directory
 const lambdaCode = new pulumi.asset.FileArchive("../service/lambda_package");
 
-// Lambda function
-const lambdaFunction = new aws.lambda.Function("qr-generator-dev-function", {
+// Security group for Lambda to access Redis
+const lambdaSg = new aws.ec2.SecurityGroup(resourceName("lambda-sg"), {
+    vpcId: defaultVpc.then(vpc => vpc.id),
+    description: "Security group for Lambda function",
+    egress: [{
+        protocol: "-1",
+        fromPort: 0,
+        toPort: 0,
+        cidrBlocks: ["0.0.0.0/0"],
+    }],
+});
+
+// Allow Lambda to connect to Redis
+new aws.ec2.SecurityGroupRule(resourceName("lambda-to-redis"), {
+    type: "ingress",
+    fromPort: 6379,
+    toPort: 6379,
+    protocol: "tcp",
+    securityGroupId: redisSg.id,
+    sourceSecurityGroupId: lambdaSg.id,
+});
+
+// Lambda function (in VPC with public subnets - no NAT needed)
+const lambdaFunction = new aws.lambda.Function(resourceName("function"), {
     runtime: aws.lambda.Runtime.Python3d9,
     handler: "app.lambda_handler",
     role: lambdaRole.arn,
@@ -108,7 +102,7 @@ const lambdaFunction = new aws.lambda.Function("qr-generator-dev-function", {
     timeout: 30,
     memorySize: 512,
     vpcConfig: {
-        subnetIds: vpc.publicSubnetIds, // Use public subnets to avoid timeout
+        subnetIds: defaultSubnets.then(subnets => subnets.ids.slice(0, 2)), // Use first 2 public subnets
         securityGroupIds: [lambdaSg.id],
     },
     environment: {
@@ -144,4 +138,3 @@ const logGroup = new aws.cloudwatch.LogGroup(resourceName("logs"), {
 export const functionUrlEndpoint = functionUrl.functionUrl;
 export const lambdaFunctionName = lambdaFunction.name;
 export const redisEndpoint = redisServerlessCache.endpoints.apply(eps => eps[0].address);
-export const vpcId = vpc.vpcId;
