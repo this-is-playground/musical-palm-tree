@@ -11,13 +11,14 @@ const environment = "dev";
 // Resource naming helper
 const resourceName = (resource: string) => `${appName}-${environment}-${resource}`;
 
-// Create VPC for Lambda to access ElastiCache
+// VPC with public and private subnets
 const vpc = new awsx.ec2.Vpc(resourceName("vpc"), {
+    cidrBlock: "10.0.0.0/16",
     numberOfAvailabilityZones: 2,
-    enableDnsHostnames: true,
-    enableDnsSupport: true,
-    natGateways: {
-        strategy: "OnePerAz", // Required for Lambda to access internet
+    natGateways: { strategy: "None" }, // Remove NAT Gateways to save ~$45/month
+    tags: {
+        Name: resourceName("vpc"),
+        Environment: environment,
     },
 });
 
@@ -62,24 +63,16 @@ new aws.ec2.SecurityGroupRule(resourceName("lambda-to-redis"), {
     sourceSecurityGroupId: lambdaSg.id,
 });
 
-// ElastiCache subnet group
-const cacheSubnetGroup = new aws.elasticache.SubnetGroup(resourceName("cache-subnet"), {
-    subnetIds: vpc.privateSubnetIds,
-});
-
-// ElastiCache Redis cluster
-const redisCluster = new aws.elasticache.ReplicationGroup(resourceName("redis"), {
-    description: "Redis cluster for QR code stats",
+// ElastiCache Serverless Redis cache
+const redisServerlessCache = new aws.elasticache.ServerlessCache(resourceName("redis-serverless-v4"), {
     engine: "redis",
-    nodeType: "cache.t3.micro", // Small instance for dev
-    numCacheClusters: 1, // Single node for dev
-    automaticFailoverEnabled: false,
-    subnetGroupName: cacheSubnetGroup.name,
+    name: resourceName("redis-serverless-v4"),
+    subnetIds: ["subnet-00d722ca1f5a3ba28", "subnet-0d815207fbd5e26ca"], // Use existing private subnets
     securityGroupIds: [redisSg.id],
-    atRestEncryptionEnabled: true,
-    transitEncryptionEnabled: false, // Simplify for dev
+    description: "Serverless Redis cache for QR code stats",
+    dailySnapshotTime: "03:00",
     tags: {
-        Name: resourceName("redis"),
+        Name: resourceName("redis-serverless"),
         Environment: environment,
     },
 });
@@ -115,12 +108,12 @@ const lambdaFunction = new aws.lambda.Function("qr-generator-dev-function", {
     timeout: 30,
     memorySize: 512,
     vpcConfig: {
-        subnetIds: vpc.privateSubnetIds,
+        subnetIds: vpc.publicSubnetIds, // Use public subnets to avoid timeout
         securityGroupIds: [lambdaSg.id],
     },
     environment: {
         variables: {
-            REDIS_URL: pulumi.interpolate`redis://${redisCluster.primaryEndpointAddress}:6379`,
+            REDIS_URL: pulumi.interpolate`rediss://${redisServerlessCache.endpoints.apply(eps => eps[0].address)}:6379`,
             LAMBDA_DEPLOYMENT: "true",
         },
     },
@@ -150,5 +143,5 @@ const logGroup = new aws.cloudwatch.LogGroup(resourceName("logs"), {
 // Outputs
 export const functionUrlEndpoint = functionUrl.functionUrl;
 export const lambdaFunctionName = lambdaFunction.name;
-export const redisEndpoint = redisCluster.primaryEndpointAddress;
+export const redisEndpoint = redisServerlessCache.endpoints.apply(eps => eps[0].address);
 export const vpcId = vpc.vpcId;

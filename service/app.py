@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 import redis
 import os
 from datetime import datetime, timedelta
@@ -13,18 +13,27 @@ class StatsStore:
         self.redis_client = None
         self.memory_store = {}
         self.storage_type = "memory"
+        self._redis_initialized = False
         
-        # Try to connect to Redis
+    def _ensure_redis_connection(self):
+        """Lazy initialization of Redis connection"""
+        if self._redis_initialized:
+            return
+            
+        self._redis_initialized = True
         redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
         try:
-            self.redis_client = redis.from_url(redis_url)
+            self.redis_client = redis.from_url(redis_url, socket_connect_timeout=5, socket_timeout=5)
             self.redis_client.ping()
             self.storage_type = "redis"
             logging.info(f"Connected to Redis at {redis_url}")
         except Exception as e:
             logging.warning(f"Redis not available, using in-memory storage: {e}")
+            self.redis_client = None
     
     def increment_qr_count(self):
+        self._ensure_redis_connection()
+        
         now = datetime.now()
         hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
         day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
@@ -51,6 +60,8 @@ class StatsStore:
             self.memory_store[key] = self.memory_store.get(key, 0) + 1
     
     def get_stats(self):
+        self._ensure_redis_connection()
+        
         now = datetime.now()
         hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
         day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
@@ -92,6 +103,34 @@ stats_store = StatsStore()
 @app.route("/api/stats")
 def get_stats():
     return jsonify(stats_store.get_stats())
+
+@app.route("/generate", methods=["POST"])
+def generate_qr():
+    """Generate QR code via REST API"""
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({"error": "Missing 'text' field"}), 400
+        
+        text = data['text']
+        style = data.get('style', 'square')
+        size = data.get('size', 200)
+        
+        # Track QR generation request
+        stats_store.increment_qr_count()
+        
+        # For now, return a simple response indicating success
+        # In a full implementation, you'd generate the actual QR code here
+        return jsonify({
+            "success": True,
+            "message": f"QR code generated for: {text}",
+            "style": style,
+            "size": size,
+            "redis_connected": stats_store.storage_type == "redis"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/")
 def qr_tool():

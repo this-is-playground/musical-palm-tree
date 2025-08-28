@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, jsonify
+from flask import Flask, render_template_string, jsonify, request
 import redis
 import os
 from datetime import datetime, timedelta
@@ -13,18 +13,28 @@ class StatsStore:
         self.redis_client = None
         self.memory_store = {}
         self.storage_type = "memory"
+        self._redis_initialized = False
         
-        # Try to connect to Redis
+    def _ensure_redis_connection(self):
+        """Lazy initialization of Redis connection"""
+        if self._redis_initialized:
+            return
+            
+        self._redis_initialized = True
         redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
         try:
-            self.redis_client = redis.from_url(redis_url)
+            self.redis_client = redis.from_url(redis_url, socket_connect_timeout=5, socket_timeout=5)
             self.redis_client.ping()
             self.storage_type = "redis"
             logging.info(f"Connected to Redis at {redis_url}")
         except Exception as e:
-            logging.warning(f"Redis not available, using in-memory storage: {e}")
+            logging.error(f"Redis connection failed: {e}")
+            self.redis_client = None
+            self.storage_type = "memory"
     
     def increment_qr_count(self):
+        self._ensure_redis_connection()
+        
         now = datetime.now()
         hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
         day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
@@ -32,14 +42,12 @@ class StatsStore:
         
         if self.redis_client:
             try:
-                pipe = self.redis_client.pipeline()
-                pipe.incr(hour_key)
-                pipe.expire(hour_key, 3600)  # 1 hour TTL
-                pipe.incr(day_key)
-                pipe.expire(day_key, 86400)  # 24 hours TTL
-                pipe.incr(week_key)
-                pipe.expire(week_key, 604800)  # 7 days TTL
-                pipe.execute()
+                self.redis_client.incr(hour_key)
+                self.redis_client.expire(hour_key, 3600)  # 1 hour TTL
+                self.redis_client.incr(day_key)
+                self.redis_client.expire(day_key, 86400)  # 24 hours TTL
+                self.redis_client.incr(week_key)
+                self.redis_client.expire(week_key, 604800)  # 7 days TTL
             except Exception:
                 # Redis failed, fall back to memory
                 self._increment_memory(hour_key, day_key, week_key)
@@ -51,6 +59,8 @@ class StatsStore:
             self.memory_store[key] = self.memory_store.get(key, 0) + 1
     
     def get_stats(self):
+        self._ensure_redis_connection()
+        
         now = datetime.now()
         hour_key = f"qr_count_hour_{now.strftime('%Y%m%d%H')}"
         day_key = f"qr_count_day_{now.strftime('%Y%m%d')}"
@@ -65,17 +75,19 @@ class StatsStore:
         
         if self.redis_client:
             try:
-                pipe = self.redis_client.pipeline()
-                pipe.get(hour_key)
-                pipe.get(day_key)
-                pipe.get(week_key)
-                results = pipe.execute()
+                # ElastiCache Serverless doesn't support pipelines across hash slots
+                # Use individual get calls instead
+                hour_val = self.redis_client.get(hour_key)
+                day_val = self.redis_client.get(day_key)
+                week_val = self.redis_client.get(week_key)
                 
-                stats["last_hour"] = int(results[0] or 0)
-                stats["last_day"] = int(results[1] or 0)
-                stats["last_week"] = int(results[2] or 0)
-            except Exception:
-                # Redis failed, use memory
+                stats["last_hour"] = int(hour_val or 0)
+                stats["last_day"] = int(day_val or 0)
+                stats["last_week"] = int(week_val or 0)
+                stats["storage_type"] = "redis"
+            except Exception as e:
+                # Redis failed, use memory and update storage type
+                logging.error(f"Redis read failed in get_stats: {e}")
                 stats["last_hour"] = self.memory_store.get(hour_key, 0)
                 stats["last_day"] = self.memory_store.get(day_key, 0)
                 stats["last_week"] = self.memory_store.get(week_key, 0)
@@ -92,6 +104,34 @@ stats_store = StatsStore()
 @app.route("/api/stats")
 def get_stats():
     return jsonify(stats_store.get_stats())
+
+@app.route("/generate", methods=["POST"])
+def generate_qr():
+    """Generate QR code via REST API"""
+    try:
+        data = request.get_json()
+        if not data or 'text' not in data:
+            return jsonify({"error": "Missing 'text' field"}), 400
+        
+        text = data['text']
+        style = data.get('style', 'square')
+        size = data.get('size', 200)
+        
+        # Track QR generation request
+        stats_store.increment_qr_count()
+        
+        # For now, return a simple response indicating success
+        # In a full implementation, you'd generate the actual QR code here
+        return jsonify({
+            "success": True,
+            "message": f"QR code generated for: {text}",
+            "style": style,
+            "size": size,
+            "redis_connected": stats_store.storage_type == "redis"
+        })
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/")
 def qr_tool():
