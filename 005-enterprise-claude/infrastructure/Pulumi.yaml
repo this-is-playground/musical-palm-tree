@@ -1,0 +1,3 @@
+name: qr-generator-enterprise-ecs
+runtime: nodejs
+description: Enterprise QR Generator service with ECS, autoscaling, and monitoring
