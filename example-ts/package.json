@@ -1,0 +1,13 @@
+{
+    "name": "qr-service-example-ts",
+    "version": "1.0.0",
+    "description": "TypeScript example using QR service components",
+    "devDependencies": {
+        "@types/node": "^24",
+        "typescript": "^5.9.2"
+    },
+    "dependencies": {
+        "@pulumi/aws": "^6.83.0",
+        "@pulumi/pulumi": "^3.187.0"
+    }
+}
