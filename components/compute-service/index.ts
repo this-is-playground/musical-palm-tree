@@ -1,1 +1,0 @@
-export { ComputeServiceComponent } from "./computeServiceComponent";

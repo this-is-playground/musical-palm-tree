@@ -1,0 +1,3 @@
+name: musical-palm-tree
+runtime: nodejs
+description: QR Code Generator Service on AWS Lambda

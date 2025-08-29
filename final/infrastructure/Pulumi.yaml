@@ -1,0 +1,19 @@
+name: qr-service-minimal
+runtime: yaml
+description: Minimal QR service using components
+
+resources:
+  # Key-value store with all defaults
+  kv-store:
+    type: qr-service:storage:KeyValueStore
+
+  # Compute service with minimal config
+  compute:
+    type: qr-service:compute:ComputeService
+    properties:
+      codePath: "../service/lambda_package"
+      environmentVariables:
+        REDIS_URL: ${kv-store.connectionUrl}
+
+outputs:
+  serviceUrl: ${compute.functionUrl}
