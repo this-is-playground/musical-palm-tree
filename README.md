@@ -7,8 +7,8 @@ This repository tells the story of how **different AIs approach the same deploym
 **The Challenge:** Deploy a simple Flask QR Generator service to production.
 
 **The Cast:**
-- 🤖 **Windsurf AI** - Chooses serverless
-- 🤖 **Devin AI** - Also chooses serverless (but differently)
+- 🤖 **Devin AI** - Chooses simple serverless
+- 🤖 **Windsurf AI** - Chooses complex serverless  
 - 🤖 **Claude AI** - Chooses containers  
 - 👨‍💻 **Human** - Chooses simplicity
 
@@ -20,17 +20,17 @@ This repository tells the story of how **different AIs approach the same deploym
 - No cloud deployment, no complexity
 - "This works great locally!"
 
-### `002-serverless-windsurf/` - Windsurf's Approach (141 lines)  
-**🤖 Windsurf thinks:** *"Let's go serverless!"*
-- AWS Lambda + ElastiCache Redis
-- VPC configuration with security groups
-- Direct resource management
-
-### `003-devin-lambda/` - Devin's Lambda Approach (74 lines)
+### `002-devin-lambda/` - Devin's Simple Lambda (74 lines)
 **🤖 Devin thinks:** *"Lambda with custom event handling!"*
 - AWS Lambda with Function URL
 - Custom event format conversion layer
 - Local dependency packaging strategy
+
+### `003-serverless-windsurf/` - Windsurf's Complex Lambda (141 lines)  
+**🤖 Windsurf thinks:** *"Let's go full serverless architecture!"*
+- AWS Lambda + ElastiCache Redis
+- VPC configuration with security groups
+- Direct resource management
 
 ### `004-containers-claude/` - Claude's Scaling (412 lines)
 **🤖 Claude thinks:** *"We need enterprise features!"*  
@@ -63,11 +63,11 @@ Infrastructure Lines of Code
     │            /  |  \  |  \
 200 │           /   |   \ |   \
     │          /    |    \|    \
-100 │    🤖   ●  🤖 |     |     \
-    │   Windsurf  Devin |     |      \
-  0 │_____●______●_____|______|_______●___👨‍💻▶
-      Base    Lambda   Lambda   Containers  Human
-              (Windsurf)(Devin)          Components
+100 │       🤖●     |     |     \
+    │    Windsurf   |     |      \
+  0 │___●____●______|______|_______●___👨‍💻▶
+      Base  Devin  Windsurf  Containers  Human
+            (74)   (141)              Components
            "AI Complexity Explosion"
 ```
 
@@ -76,8 +76,8 @@ Infrastructure Lines of Code
 | Version | AI/Human | Lines | Approach | Trade-off |
 |---------|----------|-------|----------|-----------|
 | **001-base** | Human | 0 | Local only | No deployment |
-| **002-serverless-windsurf** | 🤖 Windsurf | 141 | Lambda + Redis | Learning AWS |
-| **003-devin-lambda** | 🤖 Devin | 74 | Lambda + Custom Handler | Event conversion complexity |
+| **002-devin-lambda** | 🤖 Devin | 74 | Simple Lambda | Event conversion complexity |
+| **003-serverless-windsurf** | 🤖 Windsurf | 141 | Lambda + Redis | Learning AWS complexity |
 | **004-containers-claude** | 🤖 Claude | 412 | ECS | High complexity |
 | **005-enterprise-claude** | 🤖 Claude | 400 | Enterprise | Maximum overhead |
 | **006-components-human** | 👨‍💻 Human | 16 | Components | Best of all worlds |
@@ -86,9 +86,9 @@ Infrastructure Lines of Code
 
 **What This Reveals:**
 - AIs naturally over-engineer infrastructure solutions
-- Each AI has architectural biases (Windsurf → serverless + caching, Devin → serverless + custom event handling, Claude → containers)
+- Each AI has architectural biases (Devin → simple serverless, Windsurf → serverless + caching, Claude → containers)
 - Even the "same" approach (serverless) varies significantly between AIs
-- Complexity explodes when AIs add "production features" 
+- Complexity explodes as AIs add "production features" 
 - Human architectural insight can cut through AI complexity
 
 **The Pattern:**
