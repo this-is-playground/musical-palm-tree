@@ -1,1 +1,0 @@
-export { KeyValueStoreComponent } from "./keyValueStoreComponent";

@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Service Helper Functions
+
+# Start the service locally (requires Python and Flask)
+start_local() {
+    echo "Starting service locally..."
+    
+    # Create virtual environment if it doesn't exist
+    if [ ! -d "venv" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv venv
+    fi
+    
+    # Activate virtual environment and install dependencies
+    echo "Activating virtual environment..."
+    source venv/bin/activate
+    echo "Installing dependencies..."
+    pip install -r service/requirements.txt
+    echo "Starting application..."
+    python service/app.py
+}
+
+# Build Docker image
+build_docker() {
+    echo "Building Docker image for service..."
+    
+    # Use current working directory as project root
+    PROJECT_ROOT="$(pwd)"
+    
+    echo "Building from: $PROJECT_ROOT/service"
+    
+    if [ ! -d "$PROJECT_ROOT/service" ]; then
+        echo "Error: service directory not found at $PROJECT_ROOT/service"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
+    
+    (
+        cd "$PROJECT_ROOT/service"
+        docker build -t service .
+    )
+}
+
+# Run Docker container
+run_docker() {
+    echo "Running service in Docker container..."
+    docker run -p 8080:8080 service
+}
+
+# Build and run Docker container in one step (with Redis)
+docker_up() {
+    echo "Building and running service with Docker (includes Redis)..."
+    compose_up_bg
+}
+
+# Stop Docker container
+stop_docker() {
+    echo "Stopping Docker services..."
+    compose_down
+}
+
+# Start services with Docker Compose (includes Redis)
+compose_up() {
+    echo "Starting services with Docker Compose (Flask + Redis)..."
+    PROJECT_ROOT="$(pwd)"
+    
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
+    
+    docker-compose up --build
+}
+
+# Stop Docker Compose services
+compose_down() {
+    echo "Stopping Docker Compose services..."
+    PROJECT_ROOT="$(pwd)"
+    
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
+    
+    docker-compose down
+}
+
+# Start services with Docker Compose in background
+compose_up_bg() {
+    echo "Starting services with Docker Compose in background..."
+    PROJECT_ROOT="$(pwd)"
+    
+    if [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+        echo "Error: docker-compose.yml not found in $PROJECT_ROOT"
+        echo "Make sure you're running this from the project root directory"
+        return 1
+    fi
+    
+    docker-compose up --build -d
+}
+
+# Show help
+help() {
+    echo "Service Functions:"
+    echo "  start_local    - Start service locally with Python (in-memory stats only)"
+    echo "  docker_up      - Build and run Flask + Redis with Docker Compose (background)"
+    echo "  stop_docker    - Stop all Docker services"
+    echo "  compose_up     - Start Flask + Redis with Docker Compose (foreground)"
+    echo "  compose_up_bg  - Start Flask + Redis with Docker Compose (background)"
+    echo "  compose_down   - Stop Docker Compose services"
+    echo "  build_docker   - Build Docker image (standalone)"
+    echo "  run_docker     - Run Docker container (standalone, no Redis)"
+    echo "  help           - Show this help"
+}
+
+# If script is called directly, show help
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    help
+fi

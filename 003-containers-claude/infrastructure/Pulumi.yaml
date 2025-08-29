@@ -1,0 +1,13 @@
+name: qr-tool-infrastructure
+runtime: nodejs
+description: AWS ECS Fargate infrastructure for QR Code tool
+config:
+  appName:
+    description: Application name for resource naming
+    default: qr-tool
+  environment:
+    description: Environment (dev, staging, prod)
+    default: dev
+  containerPort:
+    description: Port the container exposes
+    default: 8080
